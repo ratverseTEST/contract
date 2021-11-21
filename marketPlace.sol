@@ -175,7 +175,7 @@ interface IERC721 is IERC165 {
 pragma solidity ^0.8.0;
 
 
-contract MorarableMarketContract {
+contract MarketContract {
     struct AuctionItem {
         uint256 id;
         address tokenAddress;
@@ -212,13 +212,16 @@ contract MorarableMarketContract {
         require(itemsForSale[id].isSold == false, "Item is already sold!");
         _;
     }
+    
+    uint256 public decimal = 1e18;
+    
+    uint256 public marketFee = 300;
 
     function addItemToMarket(uint256 tokenId, address tokenAddress, uint256 askingPrice) OnlyItemOwner(tokenAddress,tokenId) HasTransferApproval(tokenAddress,tokenId) external returns (uint256){
         require(activeItems[tokenAddress][tokenId] == false, "Item is already up for sale!");
         uint256 newItemId = itemsForSale.length;
         itemsForSale.push(AuctionItem(newItemId, tokenAddress, tokenId, payable(msg.sender), askingPrice, false));
         activeItems[tokenAddress][tokenId] = true;
-
         assert(itemsForSale[newItemId].id == newItemId);
         emit itemAdded(newItemId, tokenId, tokenAddress, askingPrice);
         return newItemId;
@@ -227,12 +230,19 @@ contract MorarableMarketContract {
     function buyItem(uint256 id) payable external ItemExists(id) IsForSale(id) HasTransferApproval(itemsForSale[id].tokenAddress,itemsForSale[id].tokenId){
         require(msg.value >= itemsForSale[id].askingPrice, "Not enough funds sent");
         require(msg.sender != itemsForSale[id].seller);
-
         itemsForSale[id].isSold = true;
         activeItems[itemsForSale[id].tokenAddress][itemsForSale[id].tokenId] = false;
         IERC721(itemsForSale[id].tokenAddress).safeTransferFrom(itemsForSale[id].seller, msg.sender, itemsForSale[id].tokenId);
-        itemsForSale[id].seller.transfer(msg.value);
+        itemsForSale[id].seller.transfer(msg.value/decimal);
 
-        emit itemSold(id, msg.sender,itemsForSale[id].askingPrice);
+        emit itemSold(id, msg.sender,itemsForSale[id].askingPrice/decimal);
     }
+    
+    function cancelItem(uint256 id) external ItemExists(id) IsForSale(id) HasTransferApproval(itemsForSale[id].tokenAddress,itemsForSale[id].tokenId){
+        require(msg.sender == itemsForSale[id].seller);
+        itemsForSale[id].isSold = true;
+        activeItems[itemsForSale[id].tokenAddress][itemsForSale[id].tokenId] = false;
+        emit itemSold(id, msg.sender,0);
+    }
+
 }
